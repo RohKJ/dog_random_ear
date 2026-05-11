@@ -11,6 +11,12 @@ __pycache__/
 outputs/
 downloads/
 
+# Public demo images
+!samples/
+!samples/*.jpg
+!samples/*.jpeg
+!samples/*.png
+
 # OS/editor files
 .DS_Store
 Thumbs.db

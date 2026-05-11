@@ -332,6 +332,11 @@
             <input id="fileInput" type="file" accept="image/*" />
           </label>
           <div class="header-actions">
+            <button class="ghost" data-sample="samples/sample-front.jpg">샘플 1</button>
+            <button class="ghost" data-sample="samples/sample-edge.jpg">샘플 2</button>
+            <button class="ghost" data-sample="samples/sample-close.jpg">샘플 3</button>
+          </div>
+          <div class="header-actions">
             <button class="ghost" id="autoFitBtn" disabled>자동 맞춤</button>
             <button class="ghost" id="fitBtn" disabled>위치 초기화</button>
             <button class="danger" id="downloadBtn" disabled>저장</button>
@@ -393,6 +398,7 @@
     const fitBtn = document.getElementById("fitBtn");
     const downloadBtn = document.getElementById("downloadBtn");
     const statusEl = document.getElementById("status");
+    const sampleButtons = document.querySelectorAll("[data-sample]");
 
     const controls = {
       x: document.getElementById("xRange"),
@@ -456,6 +462,10 @@
       autoFitBtn.addEventListener("click", () => autoFitToDog(true));
       fitBtn.addEventListener("click", resetPosition);
       downloadBtn.addEventListener("click", downloadImage);
+      sampleButtons.forEach((button) => {
+        button.addEventListener("click", () => loadImageSource(button.dataset.sample));
+      });
+      loadInitialSampleFromUrl();
 
       Object.entries(controls).forEach(([key, input]) => {
         input.addEventListener("input", () => {
@@ -513,19 +523,36 @@
 
       const reader = new FileReader();
       reader.onload = () => {
-        const image = new Image();
-        image.onload = async () => {
-          state.image = image;
-          state.subjectBox = null;
-          state.earCuts = null;
-          fitCanvasToImage(image);
-          setEnabled(true);
-          empty.style.display = "none";
-          await autoFitToDog(false);
-        };
-        image.src = reader.result;
+        loadImageSource(reader.result);
       };
       reader.readAsDataURL(file);
+    }
+
+    function loadImageSource(source) {
+      stopAnimation();
+      const image = new Image();
+      image.onload = async () => {
+        state.image = image;
+        state.subjectBox = null;
+        state.earCuts = null;
+        fitCanvasToImage(image);
+        setEnabled(true);
+        empty.style.display = "none";
+        await autoFitToDog(false);
+      };
+      image.src = source;
+    }
+
+    function loadInitialSampleFromUrl() {
+      const samples = {
+        front: "samples/sample-front.jpg",
+        edge: "samples/sample-edge.jpg",
+        close: "samples/sample-close.jpg",
+      };
+      const sample = new URLSearchParams(window.location.search).get("sample");
+      if (sample && samples[sample]) {
+        loadImageSource(samples[sample]);
+      }
     }
 
     async function loadDogDetector() {
@@ -603,22 +630,27 @@
         : "기본 자동 맞춤으로 위치를 찾는 중입니다...";
 
       const detectedBox = await detectDogBox();
-      const box = detectedBox || estimateSubjectBox();
-      if (!box) {
+      const rawFaceBox = estimateFaceFeatureBox(detectedBox) || estimateFaceFeatureBox(null);
+      const faceBox = validateFaceBox(rawFaceBox, detectedBox);
+      const subjectBox = detectedBox || faceBox || estimateSubjectBox();
+      const placementBox = faceBox || subjectBox;
+      if (!placementBox) {
         resetPosition();
         statusEl.textContent = "자동 맞춤이 애매해서 기본 위치로 맞췄어요.";
         return;
       }
 
       const minSide = Math.min(canvas.width, canvas.height);
-      state.subjectBox = box;
-      updatePhotoEarCuts(box);
-      const headX = box.x + box.w * 0.5;
-      const headY = box.y + box.h * 0.16;
+      state.subjectBox = subjectBox;
+      updatePhotoEarCuts(faceBox || subjectBox);
+      const headX = placementBox.x + placementBox.w * 0.5;
+      const headY = faceBox
+        ? placementBox.y - placementBox.h * 0.12
+        : placementBox.y;
       state.faceTarget = {
         x: Math.round(clamp((headX / canvas.width) * 100, 8, 92)),
-        y: Math.round(clamp((headY / canvas.height) * 100, 6, 58)),
-        scale: Math.round(clamp((box.w / minSide) * 58, 22, 78)),
+        y: Math.round(clamp((headY / canvas.height) * 100, 4, 82)),
+        scale: Math.round(clamp((placementBox.w / minSide) * (faceBox ? 50 : 40), 20, 72)),
         rotate: 0,
       };
       state.x = state.faceTarget.x;
@@ -629,7 +661,7 @@
       renderThumbs();
       draw();
 
-      const sourceText = detectedBox ? "AI 객체 탐지로" : "이미지 분석으로";
+      const sourceText = faceBox ? "얼굴 포인트 분석으로" : detectedBox ? "AI 객체 탐지로" : "이미지 분석으로";
       statusEl.textContent = showMessage
         ? `${sourceText} 강아지 위치를 다시 잡았어요.`
         : `${sourceText} 위치를 맞췄어요. 필요하면 살짝 조절하세요.`;
@@ -658,6 +690,197 @@
         console.warn(error);
         return null;
       }
+    }
+
+    function validateFaceBox(faceBox, detectedBox) {
+      if (!faceBox || !detectedBox) return faceBox;
+
+      const faceCenterX = faceBox.x + faceBox.w * 0.5;
+      const dogCenterX = detectedBox.x + detectedBox.w * 0.5;
+      const maxOffset = Math.max(detectedBox.w * 0.42, Math.min(canvas.width, canvas.height) * 0.16);
+
+      if (Math.abs(faceCenterX - dogCenterX) > maxOffset) return null;
+      if (faceBox.y < detectedBox.y - detectedBox.h * 0.24) return null;
+      if (faceBox.y > detectedBox.y + detectedBox.h * 0.78) return null;
+
+      return faceBox;
+    }
+
+    function estimateFaceFeatureBox(searchBox) {
+      const scanW = 220;
+      const scanH = Math.max(140, Math.round(scanW * (canvas.height / canvas.width)));
+      const scan = document.createElement("canvas");
+      scan.width = scanW;
+      scan.height = scanH;
+      const scanCtx = scan.getContext("2d", { willReadFrequently: true });
+      scanCtx.drawImage(state.image, 0, 0, scanW, scanH);
+
+      const { data } = scanCtx.getImageData(0, 0, scanW, scanH);
+      const bounds = searchBox
+        ? {
+            minX: clamp((searchBox.x - searchBox.w * 0.12) / canvas.width * scanW, 0, scanW - 1),
+            maxX: clamp((searchBox.x + searchBox.w * 1.12) / canvas.width * scanW, 1, scanW),
+            minY: clamp((searchBox.y - searchBox.h * 0.08) / canvas.height * scanH, 0, scanH - 1),
+            maxY: clamp((searchBox.y + searchBox.h * 0.74) / canvas.height * scanH, 1, scanH),
+        }
+        : { minX: 3, maxX: scanW - 3, minY: 3, maxY: scanH - 3 };
+
+      const visited = new Uint8Array(scanW * scanH);
+      const candidates = [];
+      let best = null;
+      const startX = Math.floor(bounds.minX);
+      const endX = Math.floor(bounds.maxX);
+      const startY = Math.floor(bounds.minY);
+      const endY = Math.floor(bounds.maxY);
+
+      for (let y = startY; y < endY; y += 1) {
+        for (let x = startX; x < endX; x += 1) {
+          const index = y * scanW + x;
+          if (visited[index] || !isFaceDarkPixel(data, scanW, scanH, x, y)) continue;
+
+          const component = collectDarkComponent(data, visited, scanW, scanH, x, y, bounds);
+          if (!component) continue;
+
+          const compW = component.maxX - component.minX + 1;
+          const compH = component.maxY - component.minY + 1;
+          const tooLarge = component.count > scanW * scanH * 0.018 || compW > scanW * 0.23 || compH > scanH * 0.24;
+          const tooSmall = component.count < 4;
+          if (tooLarge || tooSmall) continue;
+
+          const compactness = component.count / Math.max(1, compW * compH);
+          const centerBias = 1 - Math.abs((component.centerX / scanW) - 0.5) * 0.16;
+          const lowerHalfBoost = component.centerY > scanH * 0.28 ? 1.08 : 0.9;
+          const score = component.weight * compactness * centerBias * lowerHalfBoost;
+          const candidate = { ...component, compW, compH, score };
+          candidates.push(candidate);
+
+          if (!best || score > best.score) {
+            best = candidate;
+          }
+        }
+      }
+
+      if (!best) return null;
+
+      const group = candidates.filter((item) => {
+        const closeX = Math.abs(item.centerX - best.centerX) < scanW * 0.34;
+        const closeY = Math.abs(item.centerY - best.centerY) < scanH * 0.34;
+        const strong = item.score > best.score * 0.12;
+        return closeX && closeY && strong;
+      });
+
+      const groupWeight = group.reduce((sum, item) => sum + item.score, 0) || best.score;
+      const groupCenterX = group.reduce((sum, item) => sum + item.centerX * item.score, 0) / groupWeight;
+      const groupCenterY = group.reduce((sum, item) => sum + item.centerY * item.score, 0) / groupWeight;
+      const groupMinX = Math.min(...group.map((item) => item.minX), best.minX);
+      const groupMaxX = Math.max(...group.map((item) => item.maxX), best.maxX);
+      const groupMinY = Math.min(...group.map((item) => item.minY), best.minY);
+      const groupMaxY = Math.max(...group.map((item) => item.maxY), best.maxY);
+      const groupW = Math.max(best.compW, groupMaxX - groupMinX + 1);
+      const groupH = Math.max(best.compH, groupMaxY - groupMinY + 1);
+
+      const faceW = clamp(Math.max(groupW * 3.25, groupH * 2.7, scanW * 0.18), scanW * 0.16, scanW * 0.5);
+      const faceH = faceW * 0.82;
+      const faceX = clamp(groupCenterX - faceW * 0.5, 0, scanW - faceW);
+      const faceY = clamp(groupCenterY - faceH * 0.46, 0, scanH - faceH);
+
+      return {
+        x: faceX / scanW * canvas.width,
+        y: faceY / scanH * canvas.height,
+        w: faceW / scanW * canvas.width,
+        h: faceH / scanH * canvas.height,
+      };
+    }
+
+    function isFaceDarkPixel(data, w, h, x, y) {
+      const i = (y * w + x) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const luma = getLuma(r, g, b);
+      if (luma > 108) return false;
+
+      const furScore = nearbyBrightFurScore(data, w, h, x, y);
+      if (furScore <= 0) return false;
+
+      return localContrast(data, w, h, x, y) >= 7;
+    }
+
+    function collectDarkComponent(data, visited, w, h, startX, startY, bounds) {
+      const stack = [[startX, startY]];
+      let count = 0;
+      let weight = 0;
+      let weightedX = 0;
+      let weightedY = 0;
+      let minX = startX;
+      let minY = startY;
+      let maxX = startX;
+      let maxY = startY;
+
+      while (stack.length) {
+        const [x, y] = stack.pop();
+        if (x < bounds.minX || x >= bounds.maxX || y < bounds.minY || y >= bounds.maxY) continue;
+
+        const index = y * w + x;
+        if (visited[index] || !isFaceDarkPixel(data, w, h, x, y)) continue;
+        visited[index] = 1;
+
+        const i = index * 4;
+        const luma = getLuma(data[i], data[i + 1], data[i + 2]);
+        const furScore = nearbyBrightFurScore(data, w, h, x, y);
+        const pixelWeight = (112 - luma) + furScore * 10;
+
+        count += 1;
+        weight += pixelWeight;
+        weightedX += x * pixelWeight;
+        weightedY += y * pixelWeight;
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+
+        stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+      }
+
+      if (!count || !weight) return null;
+      return {
+        count,
+        weight,
+        minX,
+        minY,
+        maxX,
+        maxY,
+        centerX: weightedX / weight,
+        centerY: weightedY / weight,
+      };
+    }
+
+    function nearbyBrightFurScore(data, w, h, x, y) {
+      const offsets = [
+        [-8, 0], [8, 0], [0, -8], [0, 8],
+        [-6, -6], [6, -6], [-6, 6], [6, 6],
+        [-12, 0], [12, 0], [0, -12], [0, 12],
+      ];
+      let score = 0;
+
+      offsets.forEach(([dx, dy]) => {
+        const px = Math.round(clamp(x + dx, 0, w - 1));
+        const py = Math.round(clamp(y + dy, 0, h - 1));
+        const i = (py * w + px) * 4;
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const luma = getLuma(r, g, b);
+        const spread = Math.max(r, g, b) - Math.min(r, g, b);
+
+        if (luma > 128 && spread < 92) score += 1;
+      });
+
+      return score;
+    }
+
+    function getLuma(r, g, b) {
+      return 0.299 * r + 0.587 * g + 0.114 * b;
     }
 
     function estimateSubjectBox() {
@@ -812,18 +1035,17 @@
       const stoppedY = clamp(state.currentDropY, target.size * 0.2, canvas.height - target.size * 0.2);
       const diff = Math.abs(stoppedY - target.y);
       const snapRange = target.size * 0.34;
-      const finalY = diff <= snapRange ? target.y : stoppedY;
 
       stopAnimation();
       state.x = state.faceTarget.x;
-      state.y = Math.round(clamp((finalY / canvas.height) * 100, 0, 100));
+      state.y = Math.round(clamp((stoppedY / canvas.height) * 100, 0, 100));
       state.scale = state.faceTarget.scale;
       state.rotate = state.faceTarget.rotate;
       syncControls();
       draw();
 
       if (diff <= snapRange) {
-        statusEl.textContent = "딱 맞았어요. 장식이 얼굴 위치에 스냅됐습니다.";
+        statusEl.textContent = "딱 좋아요. 멈춘 프레임 그대로 고정했습니다.";
       } else if (stoppedY < target.y) {
         statusEl.textContent = "조금 빨랐어요. 세로 위치를 아래로 살짝 조절해 보세요.";
       } else {

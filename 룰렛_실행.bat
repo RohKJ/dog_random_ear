@@ -1,2 +1,2 @@
 @echo off
-start "" "%~dp0dog_ear_roulette.html"
+python "%~dp0Untitled-1.py"
