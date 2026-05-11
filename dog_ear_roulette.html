@@ -379,6 +379,8 @@
     </section>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
   <script>
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
@@ -426,6 +428,10 @@
       rouletteDuration: 2400,
       finalDrop: 0,
       animId: null,
+      detector: null,
+      detectorReady: false,
+      detectorLoading: false,
+      detectorPromise: null,
       x: 50,
       y: 26,
       scale: 38,
@@ -438,6 +444,7 @@
       renderItemGrid();
       renderThumbs();
       draw();
+      loadDogDetector();
 
       fileInput.addEventListener("change", handleFile);
       spinBtn.addEventListener("click", startRoulette);
@@ -502,16 +509,50 @@
       const reader = new FileReader();
       reader.onload = () => {
         const image = new Image();
-        image.onload = () => {
+        image.onload = async () => {
           state.image = image;
           fitCanvasToImage(image);
           setEnabled(true);
           empty.style.display = "none";
-          autoFitToDog(false);
+          await autoFitToDog(false);
         };
         image.src = reader.result;
       };
       reader.readAsDataURL(file);
+    }
+
+    async function loadDogDetector() {
+      if (state.detectorReady) return state.detector;
+      if (state.detectorPromise) return state.detectorPromise;
+
+      state.detectorLoading = true;
+      state.detectorPromise = (async () => {
+        try {
+          if (!window.cocoSsd) {
+            throw new Error("COCO-SSD script is not loaded.");
+          }
+
+          statusEl.textContent = "AI 모델을 불러오는 중입니다...";
+          state.detector = await window.cocoSsd.load({ base: "lite_mobilenet_v2" });
+          state.detectorReady = true;
+          statusEl.textContent = state.image
+            ? "AI 모델 준비 완료. 자동 맞춤을 사용할 수 있어요."
+            : "사진을 넣어 주세요.";
+          return state.detector;
+        } catch (error) {
+          state.detectorReady = false;
+          statusEl.textContent = "AI 모델을 불러오지 못해 기본 자동 맞춤으로 동작합니다.";
+          console.warn(error);
+          return null;
+        } finally {
+          state.detectorLoading = false;
+          if (!state.detectorReady) {
+            state.detectorPromise = null;
+          }
+        }
+      })();
+
+      return state.detectorPromise;
     }
 
     function fitCanvasToImage(image) {
@@ -541,10 +582,19 @@
       draw();
     }
 
-    function autoFitToDog(showMessage) {
+    async function autoFitToDog(showMessage) {
       if (!state.image) return;
 
-      const box = estimateSubjectBox();
+      if (!state.detectorReady) {
+        await loadDogDetector();
+      }
+
+      statusEl.textContent = state.detectorReady
+        ? "AI가 강아지 위치를 찾는 중입니다..."
+        : "기본 자동 맞춤으로 위치를 찾는 중입니다...";
+
+      const detectedBox = await detectDogBox();
+      const box = detectedBox || estimateSubjectBox();
       if (!box) {
         resetPosition();
         statusEl.textContent = "자동 맞춤이 애매해서 기본 위치로 맞췄어요.";
@@ -561,9 +611,35 @@
       syncControls();
       draw();
 
+      const sourceText = detectedBox ? "AI 객체 탐지로" : "이미지 분석으로";
       statusEl.textContent = showMessage
-        ? "사진에서 강아지 위치를 다시 잡았어요."
-        : "사진을 보고 자동으로 위치를 맞췄어요. 필요하면 살짝 조절하세요.";
+        ? `${sourceText} 강아지 위치를 다시 잡았어요.`
+        : `${sourceText} 위치를 맞췄어요. 필요하면 살짝 조절하세요.`;
+    }
+
+    async function detectDogBox() {
+      if (!state.detectorReady || !state.detector || !state.image) return null;
+
+      const detectCanvas = document.createElement("canvas");
+      detectCanvas.width = canvas.width;
+      detectCanvas.height = canvas.height;
+      const detectCtx = detectCanvas.getContext("2d");
+      detectCtx.drawImage(state.image, 0, 0, canvas.width, canvas.height);
+
+      try {
+        const predictions = await state.detector.detect(detectCanvas);
+        const dog = predictions
+          .filter((item) => item.class === "dog" && item.score >= 0.35)
+          .sort((a, b) => b.score - a.score)[0];
+
+        if (!dog) return null;
+
+        const [x, y, w, h] = dog.bbox;
+        return { x, y, w, h };
+      } catch (error) {
+        console.warn(error);
+        return null;
+      }
     }
 
     function estimateSubjectBox() {
