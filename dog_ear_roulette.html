@@ -1,0 +1,955 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>강아지 귀 룰렛</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #202124;
+      --muted: #68707a;
+      --line: #d8dee6;
+      --panel: #f7f9fb;
+      --paper: #ffffff;
+      --accent: #127c72;
+      --accent-2: #b8452d;
+      --shadow: 0 14px 45px rgba(22, 31, 41, 0.13);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, "Malgun Gothic", sans-serif;
+      color: var(--ink);
+      background:
+        linear-gradient(180deg, #eef4f7 0%, #fff 44%, #f8efe7 100%);
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    .app {
+      width: min(1180px, calc(100vw - 28px));
+      margin: 0 auto;
+      padding: 22px 0 30px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 0 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(24px, 3vw, 38px);
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(320px, 1fr) 330px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .stage-wrap {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .stage-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcfd;
+    }
+
+    .file-button {
+      position: relative;
+      display: inline-grid;
+      place-items: center;
+      min-height: 42px;
+      padding: 0 15px;
+      border-radius: 6px;
+      border: 1px solid #9bb2ba;
+      color: #0f3f42;
+      background: #e7f3f1;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .file-button input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .ghost {
+      border: 1px solid var(--line);
+      color: var(--ink);
+      background: #fff;
+    }
+
+    .primary {
+      border: 1px solid #0b665e;
+      color: #fff;
+      background: var(--accent);
+    }
+
+    .danger {
+      border: 1px solid #96361f;
+      color: #fff;
+      background: var(--accent-2);
+    }
+
+    button {
+      min-height: 42px;
+      padding: 0 14px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    .stage {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 560px;
+      background:
+        linear-gradient(90deg, rgba(32, 33, 36, 0.05) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(32, 33, 36, 0.05) 1px, transparent 1px),
+        #edf1f4;
+      background-size: 32px 32px;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      max-width: 100%;
+      max-height: min(72vh, 720px);
+      background: #fff;
+    }
+
+    .empty {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .empty strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--ink);
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+
+    aside {
+      display: grid;
+      gap: 14px;
+    }
+
+    .panel {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      box-shadow: 0 8px 28px rgba(22, 31, 41, 0.08);
+    }
+
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .item {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      align-items: center;
+      gap: 8px;
+      min-height: 56px;
+      padding: 7px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .item[data-active="true"] {
+      border-color: #0f7d75;
+      box-shadow: inset 0 0 0 2px rgba(18, 124, 114, 0.18);
+      background: #edf8f6;
+    }
+
+    .thumb {
+      width: 42px;
+      height: 42px;
+      border-radius: 6px;
+      border: 1px solid #d7dde4;
+      background: #f8fafb;
+    }
+
+    .item span {
+      min-width: 0;
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+      margin-top: 12px;
+    }
+
+    .field label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .field output {
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .segmented {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .hint {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .status {
+      min-height: 22px;
+      margin-top: 10px;
+      color: #374047;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    @media (max-width: 880px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      header,
+      .stage-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .header-actions,
+      .stage-toolbar > div {
+        justify-content: stretch;
+      }
+
+      .header-actions > *,
+      .stage-toolbar button,
+      .file-button {
+        flex: 1;
+      }
+
+      .stage {
+        min-height: 430px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>강아지 귀 룰렛</h1>
+      <div class="header-actions">
+        <button class="ghost" id="randomBtn" disabled>랜덤</button>
+        <button class="primary" id="spinBtn" disabled>룰렛 시작</button>
+      </div>
+    </header>
+
+    <section class="workspace">
+      <div class="stage-wrap">
+        <div class="stage-toolbar">
+          <label class="file-button">
+            사진 넣기
+            <input id="fileInput" type="file" accept="image/*" />
+          </label>
+          <div class="header-actions">
+            <button class="ghost" id="autoFitBtn" disabled>자동 맞춤</button>
+            <button class="ghost" id="fitBtn" disabled>위치 초기화</button>
+            <button class="danger" id="downloadBtn" disabled>저장</button>
+          </div>
+        </div>
+        <div class="stage">
+          <canvas id="canvas" width="960" height="720"></canvas>
+          <div class="empty" id="empty">
+            <div>
+              <strong>사진을 올리면 바로 시작할 수 있어요</strong>
+              강아지 얼굴 위쪽에 귀나 모자가 룰렛처럼 내려와서 붙습니다.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <aside>
+        <section class="panel">
+          <h2>장식</h2>
+          <div class="grid" id="itemGrid"></div>
+          <p class="hint">원하는 장식을 먼저 고르거나 랜덤으로 섞을 수 있어요.</p>
+        </section>
+
+        <section class="panel">
+          <h2>위치</h2>
+          <div class="field">
+            <label for="xRange">가로 <output id="xOut">50</output></label>
+            <input id="xRange" type="range" min="0" max="100" value="50" disabled />
+          </div>
+          <div class="field">
+            <label for="yRange">세로 <output id="yOut">26</output></label>
+            <input id="yRange" type="range" min="0" max="100" value="26" disabled />
+          </div>
+          <div class="field">
+            <label for="scaleRange">크기 <output id="scaleOut">38</output></label>
+            <input id="scaleRange" type="range" min="14" max="80" value="38" disabled />
+          </div>
+          <div class="field">
+            <label for="rotateRange">기울기 <output id="rotateOut">0</output></label>
+            <input id="rotateRange" type="range" min="-35" max="35" value="0" disabled />
+          </div>
+          <p class="status" id="status">사진을 넣어 주세요.</p>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const empty = document.getElementById("empty");
+    const fileInput = document.getElementById("fileInput");
+    const itemGrid = document.getElementById("itemGrid");
+    const spinBtn = document.getElementById("spinBtn");
+    const randomBtn = document.getElementById("randomBtn");
+    const autoFitBtn = document.getElementById("autoFitBtn");
+    const fitBtn = document.getElementById("fitBtn");
+    const downloadBtn = document.getElementById("downloadBtn");
+    const statusEl = document.getElementById("status");
+
+    const controls = {
+      x: document.getElementById("xRange"),
+      y: document.getElementById("yRange"),
+      scale: document.getElementById("scaleRange"),
+      rotate: document.getElementById("rotateRange"),
+    };
+
+    const outputs = {
+      x: document.getElementById("xOut"),
+      y: document.getElementById("yOut"),
+      scale: document.getElementById("scaleOut"),
+      rotate: document.getElementById("rotateOut"),
+    };
+
+    const decorations = [
+      { id: "floppy", name: "처진 강아지 귀", draw: drawFloppyEars },
+      { id: "pointy", name: "뾰족 강아지 귀", draw: drawPointyEars },
+      { id: "poodle", name: "복슬 귀", draw: drawPoodleEars },
+      { id: "beagle", name: "긴 갈색 귀", draw: drawLongEars },
+      { id: "cap", name: "야구 모자", draw: drawCap },
+      { id: "party", name: "파티 모자", draw: drawPartyHat },
+      { id: "crown", name: "왕관", draw: drawCrown },
+      { id: "bow", name: "리본", draw: drawBow },
+    ];
+
+    const state = {
+      image: null,
+      imageBox: { x: 0, y: 0, w: canvas.width, h: canvas.height },
+      selected: decorations[0],
+      roulette: false,
+      rouletteStarted: 0,
+      rouletteDuration: 2400,
+      finalDrop: 0,
+      animId: null,
+      x: 50,
+      y: 26,
+      scale: 38,
+      rotate: 0,
+    };
+
+    init();
+
+    function init() {
+      renderItemGrid();
+      renderThumbs();
+      draw();
+
+      fileInput.addEventListener("change", handleFile);
+      spinBtn.addEventListener("click", startRoulette);
+      randomBtn.addEventListener("click", chooseRandom);
+      autoFitBtn.addEventListener("click", () => autoFitToDog(true));
+      fitBtn.addEventListener("click", resetPosition);
+      downloadBtn.addEventListener("click", downloadImage);
+
+      Object.entries(controls).forEach(([key, input]) => {
+        input.addEventListener("input", () => {
+          state[key] = Number(input.value);
+          outputs[key].value = input.value;
+          draw();
+        });
+      });
+    }
+
+    function renderItemGrid() {
+      itemGrid.innerHTML = "";
+      decorations.forEach((decoration) => {
+        const button = document.createElement("button");
+        button.className = "item";
+        button.type = "button";
+        button.dataset.id = decoration.id;
+        button.dataset.active = decoration.id === state.selected.id;
+        button.innerHTML = `
+          <canvas class="thumb" width="84" height="84" aria-hidden="true"></canvas>
+          <span>${decoration.name}</span>
+        `;
+        button.addEventListener("click", () => {
+          state.selected = decoration;
+          updateActiveItem();
+          draw();
+        });
+        itemGrid.appendChild(button);
+      });
+    }
+
+    function renderThumbs() {
+      document.querySelectorAll(".item").forEach((button) => {
+        const decoration = decorations.find((item) => item.id === button.dataset.id);
+        const thumb = button.querySelector("canvas");
+        const tctx = thumb.getContext("2d");
+        tctx.clearRect(0, 0, thumb.width, thumb.height);
+        tctx.save();
+        tctx.translate(42, 46);
+        decoration.draw(tctx, 62, 0);
+        tctx.restore();
+      });
+    }
+
+    function updateActiveItem() {
+      document.querySelectorAll(".item").forEach((button) => {
+        button.dataset.active = button.dataset.id === state.selected.id;
+      });
+    }
+
+    function handleFile(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const image = new Image();
+        image.onload = () => {
+          state.image = image;
+          fitCanvasToImage(image);
+          setEnabled(true);
+          empty.style.display = "none";
+          autoFitToDog(false);
+        };
+        image.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function fitCanvasToImage(image) {
+      const maxW = 1080;
+      const maxH = 820;
+      const ratio = Math.min(maxW / image.width, maxH / image.height, 1);
+      canvas.width = Math.max(320, Math.round(image.width * ratio));
+      canvas.height = Math.max(320, Math.round(image.height * ratio));
+      state.imageBox = { x: 0, y: 0, w: canvas.width, h: canvas.height };
+    }
+
+    function setEnabled(enabled) {
+      [spinBtn, randomBtn, autoFitBtn, fitBtn, downloadBtn].forEach((button) => {
+        button.disabled = !enabled;
+      });
+      Object.values(controls).forEach((input) => {
+        input.disabled = !enabled;
+      });
+    }
+
+    function resetPosition() {
+      state.x = 50;
+      state.y = 26;
+      state.scale = 38;
+      state.rotate = 0;
+      syncControls();
+      draw();
+    }
+
+    function autoFitToDog(showMessage) {
+      if (!state.image) return;
+
+      const box = estimateSubjectBox();
+      if (!box) {
+        resetPosition();
+        statusEl.textContent = "자동 맞춤이 애매해서 기본 위치로 맞췄어요.";
+        return;
+      }
+
+      const minSide = Math.min(canvas.width, canvas.height);
+      const headX = box.x + box.w * 0.5;
+      const headY = box.y + box.h * 0.16;
+      state.x = Math.round(clamp((headX / canvas.width) * 100, 8, 92));
+      state.y = Math.round(clamp((headY / canvas.height) * 100, 6, 58));
+      state.scale = Math.round(clamp((box.w / minSide) * 58, 22, 78));
+      state.rotate = 0;
+      syncControls();
+      draw();
+
+      statusEl.textContent = showMessage
+        ? "사진에서 강아지 위치를 다시 잡았어요."
+        : "사진을 보고 자동으로 위치를 맞췄어요. 필요하면 살짝 조절하세요.";
+    }
+
+    function estimateSubjectBox() {
+      const scanW = 180;
+      const scanH = Math.max(120, Math.round(scanW * (canvas.height / canvas.width)));
+      const scan = document.createElement("canvas");
+      scan.width = scanW;
+      scan.height = scanH;
+      const scanCtx = scan.getContext("2d", { willReadFrequently: true });
+      scanCtx.drawImage(state.image, 0, 0, scanW, scanH);
+
+      const imageData = scanCtx.getImageData(0, 0, scanW, scanH);
+      const data = imageData.data;
+      const bg = sampleBorderColor(data, scanW, scanH);
+      const threshold = 34;
+      let minX = scanW;
+      let minY = scanH;
+      let maxX = 0;
+      let maxY = 0;
+      let count = 0;
+
+      for (let y = 2; y < scanH - 2; y += 1) {
+        for (let x = 2; x < scanW - 2; x += 1) {
+          const i = (y * scanW + x) * 4;
+          const diff = colorDistance(data[i], data[i + 1], data[i + 2], bg.r, bg.g, bg.b);
+          const edge = localContrast(data, scanW, scanH, x, y);
+          const nearBorder = x < 8 || x > scanW - 9 || y < 8 || y > scanH - 9;
+          const centerWeight = 1 - Math.abs((x / scanW) - 0.5) * 0.35;
+          const score = diff * centerWeight + edge * 0.8;
+
+          if (!nearBorder && score > threshold) {
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+            count += 1;
+          }
+        }
+      }
+
+      if (count < scanW * scanH * 0.035) return null;
+
+      const padX = Math.round((maxX - minX) * 0.08);
+      const padY = Math.round((maxY - minY) * 0.06);
+      minX = clamp(minX - padX, 0, scanW - 1);
+      maxX = clamp(maxX + padX, 1, scanW);
+      minY = clamp(minY - padY, 0, scanH - 1);
+      maxY = clamp(maxY + padY, 1, scanH);
+
+      return {
+        x: (minX / scanW) * canvas.width,
+        y: (minY / scanH) * canvas.height,
+        w: ((maxX - minX) / scanW) * canvas.width,
+        h: ((maxY - minY) / scanH) * canvas.height,
+      };
+    }
+
+    function sampleBorderColor(data, w, h) {
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let count = 0;
+
+      for (let y = 0; y < h; y += 8) {
+        for (const x of [0, 1, 2, w - 3, w - 2, w - 1]) {
+          const i = (y * w + x) * 4;
+          r += data[i];
+          g += data[i + 1];
+          b += data[i + 2];
+          count += 1;
+        }
+      }
+
+      for (let x = 0; x < w; x += 8) {
+        for (const y of [0, 1, 2, h - 3, h - 2, h - 1]) {
+          const i = (y * w + x) * 4;
+          r += data[i];
+          g += data[i + 1];
+          b += data[i + 2];
+          count += 1;
+        }
+      }
+
+      return {
+        r: r / count,
+        g: g / count,
+        b: b / count,
+      };
+    }
+
+    function localContrast(data, w, h, x, y) {
+      const i = (y * w + x) * 4;
+      const right = (y * w + Math.min(w - 1, x + 2)) * 4;
+      const down = (Math.min(h - 1, y + 2) * w + x) * 4;
+      return (
+        colorDistance(data[i], data[i + 1], data[i + 2], data[right], data[right + 1], data[right + 2]) +
+        colorDistance(data[i], data[i + 1], data[i + 2], data[down], data[down + 1], data[down + 2])
+      ) / 2;
+    }
+
+    function colorDistance(r1, g1, b1, r2, g2, b2) {
+      const dr = r1 - r2;
+      const dg = g1 - g2;
+      const db = b1 - b2;
+      return Math.sqrt(dr * dr + dg * dg + db * db);
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function syncControls() {
+      Object.entries(controls).forEach(([key, input]) => {
+        input.value = state[key];
+        outputs[key].value = state[key];
+      });
+    }
+
+    function chooseRandom() {
+      const next = decorations[Math.floor(Math.random() * decorations.length)];
+      state.selected = next;
+      updateActiveItem();
+      statusEl.textContent = `${next.name} 선택!`;
+      draw();
+    }
+
+    function startRoulette() {
+      if (!state.image || state.roulette) return;
+      state.roulette = true;
+      state.rouletteStarted = performance.now();
+      state.finalDrop = -240;
+      statusEl.textContent = "룰렛 도는 중...";
+      spinBtn.disabled = true;
+      animate();
+    }
+
+    function animate() {
+      draw();
+      if (state.roulette) {
+        state.animId = requestAnimationFrame(animate);
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (state.image) {
+        ctx.drawImage(state.image, 0, 0, canvas.width, canvas.height);
+      } else {
+        drawPlaceholder();
+        return;
+      }
+
+      if (state.roulette) {
+        drawRoulette();
+      } else {
+        drawDecorationAt(state.selected, getTarget());
+      }
+    }
+
+    function drawPlaceholder() {
+      ctx.fillStyle = "#f7f9fb";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = "#cfd7df";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(16, 16, canvas.width - 32, canvas.height - 32);
+    }
+
+    function drawRoulette() {
+      const now = performance.now();
+      const elapsed = now - state.rouletteStarted;
+      const progress = Math.min(elapsed / state.rouletteDuration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const target = getTarget();
+      const itemH = target.size * 0.96;
+      const speed = 34 + (1 - eased) * 42;
+      const baseY = ((elapsed / 1000) * speed * itemH) % itemH;
+
+      ctx.save();
+      ctx.globalAlpha = 0.92;
+      for (let i = -6; i < 11; i += 1) {
+        const decoration = decorations[Math.abs(i + Math.floor(elapsed / 110)) % decorations.length];
+        const y = baseY + i * itemH;
+        drawDecorationAt(decoration, {
+          x: target.x,
+          y,
+          size: target.size,
+          rotate: target.rotate,
+        });
+      }
+      ctx.restore();
+
+      if (progress >= 1) {
+        const next = decorations[Math.floor(Math.random() * decorations.length)];
+        state.selected = next;
+        updateActiveItem();
+        state.roulette = false;
+        spinBtn.disabled = false;
+        statusEl.textContent = `${next.name} 당첨! 위치를 조금 더 맞출 수 있어요.`;
+        draw();
+      }
+    }
+
+    function getTarget() {
+      const minSide = Math.min(canvas.width, canvas.height);
+      return {
+        x: canvas.width * (state.x / 100),
+        y: canvas.height * (state.y / 100),
+        size: minSide * (state.scale / 100),
+        rotate: state.rotate * Math.PI / 180,
+      };
+    }
+
+    function drawDecorationAt(decoration, target) {
+      ctx.save();
+      ctx.translate(target.x, target.y);
+      ctx.rotate(target.rotate);
+      decoration.draw(ctx, target.size, 1);
+      ctx.restore();
+    }
+
+    function downloadImage() {
+      if (!state.image) return;
+      const link = document.createElement("a");
+      link.download = "dog-roulette.png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    }
+
+    function drawFloppyEars(g, size) {
+      const s = size / 100;
+      g.fillStyle = "#6a3f2c";
+      roundedEar(g, -34 * s, -8 * s, 34 * s, 92 * s, -0.24);
+      roundedEar(g, 34 * s, -8 * s, 34 * s, 92 * s, 0.24);
+      g.fillStyle = "#a96a45";
+      roundedEar(g, -34 * s, 2 * s, 18 * s, 64 * s, -0.18);
+      roundedEar(g, 34 * s, 2 * s, 18 * s, 64 * s, 0.18);
+    }
+
+    function drawPointyEars(g, size) {
+      const s = size / 100;
+      drawTriangle(g, -35 * s, -12 * s, 36 * s, 86 * s, "#8d583a", "#f0b08f");
+      drawTriangle(g, 35 * s, -12 * s, 36 * s, 86 * s, "#8d583a", "#f0b08f", true);
+    }
+
+    function drawPoodleEars(g, size) {
+      const s = size / 100;
+      bubbleEar(g, -34 * s, 12 * s, s, "#2f2422");
+      bubbleEar(g, 34 * s, 12 * s, s, "#2f2422");
+      g.fillStyle = "#f2efe8";
+      g.beginPath();
+      g.ellipse(0, -12 * s, 38 * s, 24 * s, 0, 0, Math.PI * 2);
+      g.fill();
+    }
+
+    function drawLongEars(g, size) {
+      const s = size / 100;
+      g.fillStyle = "#7c4427";
+      roundedEar(g, -38 * s, 0, 25 * s, 104 * s, -0.12);
+      roundedEar(g, 38 * s, 0, 25 * s, 104 * s, 0.12);
+      g.fillStyle = "#3a2418";
+      roundedEar(g, -38 * s, 18 * s, 13 * s, 62 * s, -0.08);
+      roundedEar(g, 38 * s, 18 * s, 13 * s, 62 * s, 0.08);
+    }
+
+    function drawCap(g, size) {
+      const s = size / 100;
+      g.fillStyle = "#215f9a";
+      g.beginPath();
+      g.ellipse(0, -10 * s, 48 * s, 30 * s, 0, Math.PI, 0);
+      g.closePath();
+      g.fill();
+      g.fillStyle = "#17466f";
+      g.beginPath();
+      g.ellipse(18 * s, 0, 45 * s, 12 * s, -0.12, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = "#ffffff";
+      g.lineWidth = 4 * s;
+      g.beginPath();
+      g.moveTo(0, -40 * s);
+      g.lineTo(0, 10 * s);
+      g.stroke();
+    }
+
+    function drawPartyHat(g, size) {
+      const s = size / 100;
+      g.fillStyle = "#d84a36";
+      g.beginPath();
+      g.moveTo(0, -70 * s);
+      g.lineTo(-44 * s, 34 * s);
+      g.lineTo(44 * s, 34 * s);
+      g.closePath();
+      g.fill();
+      g.strokeStyle = "#f5d35f";
+      g.lineWidth = 8 * s;
+      for (let y = -36; y < 28; y += 24) {
+        g.beginPath();
+        g.moveTo((-24 + y * 0.2) * s, y * s);
+        g.lineTo((26 + y * 0.2) * s, (y + 16) * s);
+        g.stroke();
+      }
+      g.fillStyle = "#f5d35f";
+      g.beginPath();
+      g.arc(0, -72 * s, 11 * s, 0, Math.PI * 2);
+      g.fill();
+    }
+
+    function drawCrown(g, size) {
+      const s = size / 100;
+      g.fillStyle = "#f0be35";
+      g.beginPath();
+      g.moveTo(-50 * s, 28 * s);
+      g.lineTo(-38 * s, -38 * s);
+      g.lineTo(-14 * s, 8 * s);
+      g.lineTo(0, -48 * s);
+      g.lineTo(14 * s, 8 * s);
+      g.lineTo(38 * s, -38 * s);
+      g.lineTo(50 * s, 28 * s);
+      g.closePath();
+      g.fill();
+      g.fillStyle = "#8a4ab8";
+      [-34, 0, 34].forEach((x) => {
+        g.beginPath();
+        g.arc(x * s, -35 * s, 8 * s, 0, Math.PI * 2);
+        g.fill();
+      });
+      g.fillStyle = "#c98d1a";
+      g.fillRect(-50 * s, 24 * s, 100 * s, 14 * s);
+    }
+
+    function drawBow(g, size) {
+      const s = size / 100;
+      g.fillStyle = "#c82858";
+      g.beginPath();
+      g.ellipse(-28 * s, 0, 32 * s, 24 * s, -0.35, 0, Math.PI * 2);
+      g.ellipse(28 * s, 0, 32 * s, 24 * s, 0.35, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = "#8f183b";
+      g.beginPath();
+      g.roundRect(-13 * s, -14 * s, 26 * s, 28 * s, 7 * s);
+      g.fill();
+    }
+
+    function roundedEar(g, x, y, w, h, tilt) {
+      g.save();
+      g.translate(x, y);
+      g.rotate(tilt);
+      g.beginPath();
+      g.ellipse(0, h * 0.32, w, h * 0.52, 0, 0, Math.PI * 2);
+      g.fill();
+      g.restore();
+    }
+
+    function drawTriangle(g, x, y, w, h, outer, inner, flip = false) {
+      g.save();
+      g.translate(x, y);
+      if (flip) g.scale(-1, 1);
+      g.fillStyle = outer;
+      g.beginPath();
+      g.moveTo(0, -h * 0.54);
+      g.lineTo(-w * 0.66, h * 0.48);
+      g.lineTo(w * 0.36, h * 0.48);
+      g.closePath();
+      g.fill();
+      g.fillStyle = inner;
+      g.beginPath();
+      g.moveTo(-2, -h * 0.25);
+      g.lineTo(-w * 0.35, h * 0.36);
+      g.lineTo(w * 0.16, h * 0.36);
+      g.closePath();
+      g.fill();
+      g.restore();
+    }
+
+    function bubbleEar(g, x, y, s, color) {
+      g.fillStyle = color;
+      const points = [
+        [0, -38, 22], [-18, -22, 21], [16, -18, 20],
+        [-22, 2, 23], [20, 6, 24], [-12, 28, 21], [12, 34, 18],
+      ];
+      points.forEach(([dx, dy, r]) => {
+        g.beginPath();
+        g.arc(x + dx * s, y + dy * s, r * s, 0, Math.PI * 2);
+        g.fill();
+      });
+    }
+  </script>
+</body>
+</html>

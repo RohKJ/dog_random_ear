@@ -1,0 +1,25 @@
+# Local Python cache
+__pycache__/
+*.py[cod]
+
+# Private photos and generated images
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.gif
+outputs/
+downloads/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Optional model files for later AI experiments
+models/
+*.task
+*.onnx
+*.tflite
+*.bin
